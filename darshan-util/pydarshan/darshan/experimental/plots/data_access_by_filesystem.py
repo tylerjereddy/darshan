@@ -14,6 +14,63 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import darshan
 
+pd.options.display.max_colwidth = 100
+
+def produce_dxt_counter_df(report, module):
+    # accepts a darshan report object and string
+    # with the name of the module
+    # the DXT_POSIX and DXT_MPIIO modules
+    # accepted by this function require special
+    # handling to produce a convenient dataframe
+    if module not in {'DXT_POSIX', 'DXT_MPIIO'}:
+        raise ValueError(f"module {module} not supported by produce_dxt_counter_df")
+
+    # it seems that the DXT data is initially provided as a
+    # dictionary, even if requesting via to_df(), so
+    # a bit of processing to do to be able to return
+    # a dataframe that can be handled similarly to i.e.,
+    # the POSIX module
+    dxt_data_dict = report.records[module].to_df()[0]
+    # now, DXT tracing organizes first by file ID, then by rank number
+
+    # I believe that to provide consistency with the POSIX-style
+    # dataframe interface in my current workflow, one approach
+    # might be to have a single dataframe row per file ID
+    # along with the "length" (in bytes) columns summed to a
+    # single value per file for the read_segments and write_segments
+    # dictionary fields (which are themselves dataframes)
+
+    # NOTE: the DXT log file I'm currently working with is likely too
+    # simple to handle the general/more complex cases
+    # TODO: try with DXT-enabled logs that trace many different files
+    # and get the summarized dataframe data produced correctly
+
+    # for the moment, the dictionaries/DXT data structures
+    # I have access to are fairly flat
+    id_field = dxt_data_dict['id']
+    read_segments_df = dxt_data_dict['read_segments']
+    write_segments_df = dxt_data_dict['write_segments']
+
+    # compound to {module}_BYTES_READ and {module}_BYTES_WRITTEN dataframe fields
+    # for similarity with i.e., POSIX mod df layout
+    if read_segments_df.empty:
+        bytes_read_field = 0
+    else:
+        bytes_read_field = read_segments_df['length'].sum()
+
+    if write_segments_df.empty:
+        bytes_write_field = 0
+    else:
+        bytes_write_field = write_segments_df['length'].sum()
+
+    # produce a DXT "equivalent" of rec_counters df
+    rec_counters = pd.DataFrame({'id': id_field,
+                                f'{module}_BYTES_READ': bytes_read_field,
+                                f'{module}_BYTES_WRITTEN': bytes_write_field,
+                                },
+                                index=[0])
+    return rec_counters
+
 
 def convert_file_path_to_root_path(file_path):
     path_parts = pathlib.Path(file_path).parts
@@ -47,7 +104,7 @@ def identify_filesystems(file_id_dict, verbose=False):
         print("filesystem_roots:", filesystem_roots)
     return filesystem_roots
 
-def per_filesystem_unique_file_read_write_counter_posix(report, filesystem_roots, verbose=False):
+def per_filesystem_unique_file_read_write_counter(report, filesystem_roots, verbose=False):
     # we are interested in finding all unique files that we have read
     # at least 1 byte from, or written at least 1 byte to
     # and then summing those counts per filesystem
@@ -69,44 +126,88 @@ def per_filesystem_unique_file_read_write_counter_posix(report, filesystem_roots
     # of unique files to which a single byte has been read
     # (or written) on a given filesystem (index)
 
-    report.mod_read_all_records('POSIX', dtype='pandas')
-    rec_counters = report.records['POSIX'][0]['counters']
-    
-    # first, filter to produce a dataframe where POSIX_BYTES_READ >= 1
-    # for each row (tracked event for a given rank or group of ranks)
-    df_reads = rec_counters.loc[rec_counters['POSIX_BYTES_READ'] >= 1]
+    data_dict = {}
 
-    # similar filter for writing
-    df_writes = rec_counters.loc[rec_counters['POSIX_BYTES_WRITTEN'] >= 1]
+    for mod in report._modules.keys():
+        if mod == 'LUSTRE':
+            continue
+        print("parsing mod:", mod)
+        report.mod_read_all_records(mod, dtype='pandas')
+        try:
+            rec_counters = report.records[mod][0]['counters']
+        except KeyError:
+            # for DXT-related modules for example
+            # we'll need separate handling to produce
+            # a rec_counters dataframe
+            rec_counters = produce_dxt_counter_df(report=report, module=mod)
+        
+        if mod == 'MPI-IO':
+            subkey = mod.replace('-', '')
+        else:
+            subkey = mod
+        # first, filter to produce a dataframe where (mod)_BYTES_READ >= 1
+        # for each row (tracked event for a given rank or group of ranks)
+        df_reads = rec_counters.loc[rec_counters[f'{subkey}_BYTES_READ'] >= 1]
 
-    # add column with filepaths for each event
-    df_reads = df_reads.assign(filepath=df_reads['id'].map(lambda a: convert_file_id_to_path(a, file_id_dict)))
-    df_writes = df_writes.assign(filepath=df_writes['id'].map(lambda a: convert_file_id_to_path(a, file_id_dict)))
+        # similar filter for writing
+        df_writes = rec_counters.loc[rec_counters[f'{subkey}_BYTES_WRITTEN'] >= 1]
 
-    # add column with filesystem root paths for each event
-    df_reads = df_reads.assign(filesystem_root=df_reads['filepath'].map(lambda path: convert_file_path_to_root_path(path)))
-    df_writes = df_writes.assign(filesystem_root=df_writes['filepath'].map(lambda path: convert_file_path_to_root_path(path)))
+        # add column with filepaths for each event
+        df_reads = df_reads.assign(filepath=df_reads['id'].map(lambda a: convert_file_id_to_path(a, file_id_dict)))
+        df_writes = df_writes.assign(filepath=df_writes['id'].map(lambda a: convert_file_id_to_path(a, file_id_dict)))
 
-    # groupby filesystem root and filepath, then get sizes
-    # these are Pandas series objects where the index
-    # is the name of the filesystem_root and the value
-    # is the number of unique files counted per above criteria
-    read_groups = df_reads.groupby('filesystem_root')['filepath'].nunique()
-    write_groups = df_writes.groupby('filesystem_root')['filepath'].nunique()
+        # add column with filesystem root paths for each event
+        df_reads = df_reads.assign(filesystem_root=df_reads['filepath'].map(lambda path: convert_file_path_to_root_path(path)))
+        df_writes = df_writes.assign(filesystem_root=df_writes['filepath'].map(lambda path: convert_file_path_to_root_path(path)))
 
-    # if either of the Series are effectively empty we want
-    # to produce a new Series with the filesystem_root indices
-    # and count values of 0 (for plotting purposes)
-    if read_groups.size == 0:
-        d = {}
-        keys = filesystem_roots
-        for key in keys:
-            d[key] = 0
-        read_groups = pd.Series(data=d, index=keys)
+        # we're going to be combining data from different instrumentation
+        # modules, so try to keep the data frames that are candidates for
+        # aggregation as simple as possible
+        # we should only need these fields:
+        # filesystem_root
+        # filepath
+        # subkey_BYTES_READ OR subkey_BYTES_WRITTEN
+        df_reads = df_reads[["filesystem_root", "filepath", f"{subkey}_BYTES_READ"]]
+        df_writes = df_writes[["filesystem_root", "filepath", f"{subkey}_BYTES_WRITTEN"]]
+
+        # groupby filesystem root and filepath, then get sizes
+        # these are Pandas series objects where the index
+        # is the name of the filesystem_root and the value
+        # is the number of unique files counted per above criteria
+        #read_groups = df_reads.groupby('filesystem_root')['filepath'].nunique()
+        #write_groups = df_writes.groupby('filesystem_root')['filepath'].nunique()
+
+        # if either of the dataframes are effectively empty we want
+        # to produce a new dataframe with the filesystem_root values
+        # and count values of 0 (for plotting purposes, etc.)
+        if df_reads.empty:
+            for idx, filesystem_root in enumerate(filesystem_roots):
+                df_reads.loc[idx, "filesystem_root"] = filesystem_root
+                df_reads.loc[idx, f"{subkey}_BYTES_READ"] = 0
+
+        if df_writes.empty:
+            for idx, filesystem_root in enumerate(filesystem_roots):
+                df_writes.loc[idx, "filesystem_root"] = filesystem_root
+                df_writes.loc[idx, f"{subkey}_BYTES_WRITTEN"] = 0
+
+        data_dict[mod] = (df_reads, df_writes)
+
+        #print('\n', '-' * 10)
+        #print(f"data for module {mod}:\n", 
+              #"reads:\n", data_dict[mod][0], "\n",
+              #"writes:\n", data_dict[mod][1],
+              #)
+        #print('-' * 10)
 
     if verbose:
-        print("read_groups:\n", read_groups)
-        print("write_groups:\n", write_groups)
+        for mod, val in data_dict.items():
+            print('-' * 10)
+            print('module:', mod)
+            df_reads = val[0]
+            df_writes = val[1]
+            print('df_reads:\n', df_reads)
+            print('df_writes:\n', df_writes)
+            print('-' * 10)
     return (read_groups, write_groups)
 
 def plot_series_files_rw(file_rd_series, file_wr_series, ax, log_filename):
@@ -148,7 +249,7 @@ if __name__ == '__main__':
         report = darshan.DarshanReport(log_path, read_all=True)
         file_id_dict = report.data["name_records"]
         filesystem_roots = identify_filesystems(file_id_dict=file_id_dict, verbose=True)
-        file_rd_series, file_wr_series = per_filesystem_unique_file_read_write_counter_posix(report=report, filesystem_roots=filesystem_roots, verbose=True)
+        file_rd_series, file_wr_series = per_filesystem_unique_file_read_write_counter(report=report, filesystem_roots=filesystem_roots, verbose=True)
         plot_series_files_rw(file_rd_series=file_rd_series,
                              file_wr_series=file_wr_series,
                              ax=ax_files,
