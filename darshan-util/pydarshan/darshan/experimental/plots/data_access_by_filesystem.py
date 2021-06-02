@@ -191,23 +191,72 @@ def per_filesystem_unique_file_read_write_counter(report, filesystem_roots, verb
                 df_writes.loc[idx, f"{subkey}_BYTES_WRITTEN"] = 0
 
         data_dict[mod] = (df_reads, df_writes)
+    # TODO: this data_dict also contains the bytes read/write
+    # data needed for the other plots Phil asked for in the
+    # "Data access by category" section of the report
+    # (# bytes read & # bytes written), so should be
+    # able to use a similar approach for aggregating
+    # that data...
 
-        #print('\n', '-' * 10)
-        #print(f"data for module {mod}:\n", 
-              #"reads:\n", data_dict[mod][0], "\n",
-              #"writes:\n", data_dict[mod][1],
-              #)
-        #print('-' * 10)
+    # proceed with combining the data from the different
+    # darshan instrumentation modules into single read
+    # and write dataframes
+
+    # the combined dataframe might have columns as follows:
+#      filesystem_root filepath  POSIX_BYTES_READ
+    combined_df_read = pd.DataFrame()
+    combined_df_write = pd.DataFrame()
+    for mod_name, mod_data in data_dict.items():
+        # NOTE: performance on looping/appending like this
+        # will probably be bad
+        df_read = mod_data[0]
+        df_write = mod_data[1]
+        combined_df_read = combined_df_read.append(df_read)
+        combined_df_write = combined_df_write.append(df_write)
+
+#combined_df_read:
+#      filesystem_root filepath  POSIX_BYTES_READ  MPIIO_BYTES_READ  DXT_POSIX_BYTES_READ  DXT_MPIIO_BYTES_READ
+#      0         /yellow      NaN               0.0               NaN                   NaN                   NaN
+#      1            /tmp      NaN               0.0               NaN                   NaN                   NaN
+#      0         /yellow      NaN               NaN               0.0                   NaN                   NaN
+#      1            /tmp      NaN               NaN               0.0                   NaN                   NaN
+#      0         /yellow      NaN               NaN               NaN                   0.0                   NaN
+#      1            /tmp      NaN               NaN               NaN                   0.0                   NaN
+#      0         /yellow      NaN               NaN               NaN                   NaN                   0.0
+#      1            /tmp      NaN               NaN               NaN                   NaN                   0.0
+
+#combined_df_write:
+   #filesystem_root                                                                  filepath  POSIX_BYTES_WRITTEN  MPIIO_BYTES_WRITTEN  DXT_POSIX_BYTES_WRITTEN  DXT_MPIIO_BYTES_WRITTEN
+#0         /yellow  /yellow/usr/projects/eap/users/treddy/simple_dxt_mpi_io_darshan/test.out               4000.0                  NaN                      NaN                      NaN
+#0            /tmp                   /tmp/ompi.sn176.28751/jf.29186/1/test.out_cid-0-3400.sm                 40.0                  NaN                      NaN                      NaN
+#0         /yellow  /yellow/usr/projects/eap/users/treddy/simple_dxt_mpi_io_darshan/test.out                  NaN               4000.0                      NaN                      NaN
+#0            /tmp                   /tmp/ompi.sn176.28751/jf.29186/1/test.out_cid-0-3400.sm                  NaN                  NaN                     40.0                      NaN
+#0         /yellow  /yellow/usr/projects/eap/users/treddy/simple_dxt_mpi_io_darshan/test.out                  NaN                  NaN                      NaN                   4000.0
+
+
+
+    # next, we want to produce a dataframe with this column format:
+    # filesystem_root | count_unique_files_read_from | count_unique_files_written_to
+    col_list = list(combined_df_read)[2:]
+    combined_df_read['BYTES_READ'] = combined_df_read[col_list].sum(axis=1)
+    combined_df_read = combined_df_read[['filesystem_root', 'filepath', 'BYTES_READ' ]].drop_duplicates()
+
+    col_list = list(combined_df_write)[2:]
+    combined_df_write['BYTES_WRITTEN'] = combined_df_write[col_list].sum(axis=1)
+    combined_df_write = combined_df_write[['filesystem_root', 'filepath', 'BYTES_WRITTEN' ]].drop_duplicates()
+
+    #combined_df_read = combined_df_read.groupby('filesystem_root')
+    #print("grouped:\n")
+    #combined_df_read.apply(print)
+    #combined_df_write = combined_df_write.groupby('filesystem_root')
+    #print("grouped:\n")
+    #combined_df_write.apply(print)
 
     if verbose:
-        for mod, val in data_dict.items():
-            print('-' * 10)
-            print('module:', mod)
-            df_reads = val[0]
-            df_writes = val[1]
-            print('df_reads:\n', df_reads)
-            print('df_writes:\n', df_writes)
-            print('-' * 10)
+        print('-' * 10)
+        print("combined_df_read:\n", combined_df_read)
+        print("combined_df_write:\n", combined_df_write)
+        print('-' * 10)
     return (read_groups, write_groups)
 
 def plot_series_files_rw(file_rd_series, file_wr_series, ax, log_filename):
