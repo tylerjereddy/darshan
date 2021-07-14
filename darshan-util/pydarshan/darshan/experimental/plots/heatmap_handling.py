@@ -355,88 +355,45 @@ def get_heatmap_data(agg_df: pd.DataFrame, xbins: int) -> np.ndarray:
     min_time = 0.0
     max_time = agg_df["end_time"].values.max()
     bin_edge_data = np.linspace(min_time, max_time, xbins + 1)
+    cats_start = pd.get_dummies(pd.cut(agg_df["start_time"], bin_edge_data))
+    cats_start["rank"] = agg_df["rank"]
+    cats_start["length"] = agg_df["length"]
+    cats_end = pd.get_dummies(pd.cut(agg_df["end_time"], bin_edge_data))
+    cats_end["rank"] = agg_df["rank"]
+    cats_end["length"] = agg_df["length"]
+    cats = cats_start.where(cats_start > cats_end, cats_end)
+    cats.iloc[:, :xbins] = cats.iloc[:, :xbins].replace(0, np.nan)
+    print("combined cats:\n", cats)
+    # at this point we have a dataframe of dummy (indicator)
+    # variables for each of the time segments (bins) for
+    # each IO event (row, which corresponds to a rank)
+    # each time bin that has an event has a 1 in it, otherwise
+    # NaN
 
-    # calculate the elapsed time for each data point
-    elapsed_time_data = agg_df["end_time"].values - agg_df["start_time"].values
+    # now, for each row (IO event) we want to fill in any empty (NaN)
+    # bins between filled bins because those are time spans b/w start
+    # and stop events; divide the indicators by the number of total
+    # bins spanned by the event that is filled in
 
-    # generate an array for the heatmap data
-    hmap_data = np.zeros((unique_ranks.size, xbins), dtype=float)
+    # this is actually an inner linear interpolation, followed by
+    # division to produce weights on the bin events
+    cats.iloc[:, :xbins] = cats.iloc[:, :xbins].interpolate(method='linear',
+                                                            limit_area='inside',
+                                                            axis=1)
+    print("combined cats interpolated:\n", cats)
+    sums = cats.iloc[:, :xbins].sum(axis=1) 
+    print("sums:", sums)
+    cats.iloc[:, :xbins] = cats.iloc[:, :xbins].div(sums, axis=0)
 
-    # iterate over the unique ranks
-    for i, rank in enumerate(unique_ranks):
-        # for each rank, generate a mask to select only
-        # the data points that correspond to that rank
-        rank_mask = agg_df["rank"].values == rank
-        bytes_data = agg_df["length"].values[rank_mask]
-        start_data = agg_df["start_time"].values[rank_mask]
-        end_data = agg_df["end_time"].values[rank_mask]
-        elapsed_data = elapsed_time_data[rank_mask]
-
-        # iterate over the bins
-        for j, (bmin, bmax) in enumerate(zip(bin_edge_data[:-1], bin_edge_data[1:])):
-            # create a mask for all data with a start time greater than the
-            # bin minimum time
-            start_mask_min = start_data >= bmin
-            # create a mask for all data with an end time less than the
-            # bin maximum time
-            end_mask_max = end_data <= bmax
-            # use the above masks to find the indices of all data with
-            # start/end times that fall within the bin min/max times
-            start_inside_idx = np.nonzero(start_mask_min & (start_data <= bmax))[0]
-            end_inside_idx = np.nonzero((end_data > bmin) & end_mask_max)[0]
-            # using the start/end indices, find all indices that both start
-            # and end within the bin min/max limits
-            inside_idx = np.intersect1d(start_inside_idx, end_inside_idx)
-            # use the original masks to find the indices of data that start
-            # before the bin minimum time and end after the bin maximum time
-            outside_idx = np.nonzero(~start_mask_min & ~end_mask_max)[0]
-
-            if inside_idx.size:
-                # for data that start/end inside the bin limits,
-                # add the sum of the correspondign data to the hmap data
-                hmap_data[i, j] += bytes_data[inside_idx].sum()
-                # now remove any indices from the start/end index arrays
-                # to prevent double counting
-                start_inside_idx = np.setdiff1d(start_inside_idx, inside_idx)
-                end_inside_idx = np.setdiff1d(end_inside_idx, inside_idx)
-
-            if outside_idx.size:
-                # for data that start before the bin min time and end
-                # after the bin max time (run longer than 1 bin time),
-                # calculate the proportionate data used in 1 bin time
-                # and add it to the hmap data
-                prop_data_sum = calc_prop_data_sum(
-                    tmin=bmin,
-                    tmax=bmax,
-                    total_elapsed=elapsed_data[outside_idx],
-                    total_data=bytes_data[outside_idx],
-                )
-                hmap_data[i, j] += prop_data_sum
-
-            if start_inside_idx.size:
-                # for data with only a start time within the bin limits,
-                # calculate the elapsed time (from start to bin max), use the
-                # elapsed time to calculate the proportionate data read/written,
-                # and add the data sum to the hmap data
-                prop_data_sum = calc_prop_data_sum(
-                    tmin=start_data[start_inside_idx],
-                    tmax=bmax,
-                    total_elapsed=elapsed_data[start_inside_idx],
-                    total_data=bytes_data[start_inside_idx],
-                )
-                hmap_data[i, j] += prop_data_sum
-
-            if end_inside_idx.size:
-                # for data with only an end time within the bin limits,
-                # calculate the elapsed time (from bin min to end time), use the
-                # elapsed time to calculate the proportionate data read/written,
-                # and add the data sum to the hmap data
-                prop_data_sum = calc_prop_data_sum(
-                    tmin=bmin,
-                    tmax=end_data[end_inside_idx],
-                    total_elapsed=elapsed_data[end_inside_idx],
-                    total_data=bytes_data[end_inside_idx],
-                )
-                hmap_data[i, j] += prop_data_sum
-
-    return hmap_data
+    # each full or fractional bin event is now multiplied by
+    # the bytes data
+    cats.iloc[:, :xbins] = cats.iloc[:, :xbins].mul(cats['length'], axis=0)
+    hmap_data = cats
+    hmap_data.set_index('rank', inplace=True)
+    hmap_data.drop('length', inplace=True, axis=1)
+    print("*** final hmap_data:\n", hmap_data)
+    grouped_res = hmap_data.groupby('rank').sum()
+    print("grouped result:", grouped_res)
+    array_res = grouped_res.to_numpy()
+    print("grouped ARRAY result:", array_res)
+    return array_res

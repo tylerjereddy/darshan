@@ -522,7 +522,10 @@ def test_get_heatmap_data(
         report=report, mods=["DXT_POSIX"], ops=ops
     )
     # run the aggregated data through the heatmap data code
+    print("agg_df:\n", agg_df)
+    print("xbins:\n", xbins)
     actual_hmap_data = heatmap_handling.get_heatmap_data(agg_df=agg_df, xbins=xbins)
+    print("expected_hmap_data:\n", expected_hmap_data)
 
     if filepath == "tests/input/sample-dxt-simple.darshan":
         # check the data is conserved
