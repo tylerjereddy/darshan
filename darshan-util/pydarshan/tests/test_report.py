@@ -4,6 +4,7 @@
 """Tests for `pydarshan` package."""
 
 import copy
+import importlib.resources
 
 import pytest
 import numpy as np
@@ -20,6 +21,22 @@ def response():
     """
     pass
 
+
+@pytest.mark.parametrize("subdirectory, darshan_logname, expected_jobid",
+        [('acme_fcase_trace', 'snyder_acme.exe_id1253318_9-27-24239-1515303144625770178_2.darshan', 10),
+         ('apmpi', 'darshan-apmpi-2nodes-64mpi.darshan', 10),
+         #('apmpi_apxc', 'mpi-io-test.darshan', 10),
+         ('imbalanced_io', 'imbalanced-io.darshan', 1452113755),
+         ('stdio_no_posix', 'laytonjb_test1_id28730_6-7-43012-2131301613401632697_1.darshan', 28730),
+        ])
+@pytest.mark.skipif(not pytest.has_log_repo, reason='darshan logs repo not available')
+def test_metadata_darshan_logs(subdirectory, darshan_logname, expected_jobid):
+    # Check metadata from all the log files in the
+    # darshan_logs data/Python project
+    with importlib.resources.path(f'darshan_logs.{subdirectory}',
+                                   darshan_logname) as logfile:
+        report = darshan.DarshanReport(str(logfile))
+        assert expected_jobid == report.metadata['job']['jobid']
 
 def test_metadata():
     """Sample for an expected property in counters."""
