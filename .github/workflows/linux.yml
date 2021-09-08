@@ -30,6 +30,7 @@ jobs:
         run: |
           mkdir darshan_install
           export DARSHAN_INSTALL_PATH=$PWD/darshan_install
+          git submodule update --init
           ./prepare.sh
           cd darshan-util
           ./configure --prefix=$DARSHAN_INSTALL_PATH --enable-shared --enable-pydarshan --enable-apxc-mod --enable-apmpi-mod
