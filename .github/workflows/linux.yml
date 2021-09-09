@@ -30,14 +30,16 @@ jobs:
         run: |
           mkdir darshan_install
           export DARSHAN_INSTALL_PATH=$PWD/darshan_install
+          git submodule update --init
           cd darshan-util
-          ./configure --prefix=$DARSHAN_INSTALL_PATH --enable-shared --enable-pydarshan
+          ./configure --prefix=$DARSHAN_INSTALL_PATH --enable-shared --enable-pydarshan  --enable-autoperf-apxc --enable-autoperf-apmpi
           make
           make install
       - name: Install pydarshan
         run: |
           cd darshan-util/pydarshan
-          python -m pip install .
+          # TODO: see gh-476
+          python setup.py install
       # shim for importlib.resources on Python < 3.9
       - if: ${{matrix.python-version < 3.9}}
         name: Install importlib_resources
@@ -56,7 +58,7 @@ jobs:
           # the test suite is sensitive to
           # relative dir for test file paths
           cd darshan-util/pydarshan
-          pytest --cov-report xml --cov=darshan --cov=tests
+          pytest -rsx --cov-report xml --cov=darshan --cov=tests
       - name: mypy check
         run: |
           export LD_LIBRARY_PATH=$PWD/darshan_install/lib
