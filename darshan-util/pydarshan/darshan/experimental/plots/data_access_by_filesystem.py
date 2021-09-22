@@ -264,6 +264,22 @@ def convert_file_path_to_root_path(file_path: str) -> str:
 
 
 def convert_id_dict_to_arrays(file_id_dict: Dict[int, str]):
+    """
+    Splits the file hash/path dictionary into corresponding arrays, 
+    one for the file hashes and another for the file paths.
+
+    Parameters 
+    ----------
+    file_id_dict: a dictionary mapping integer file hash values
+                to string values corresponding to their respective
+                paths
+
+    Returns
+    -------
+    A tuple of form ``(file_id_hash_arr, file_path_arr)`` where the first 
+    element is an array containing the integer file hash values and the 
+    second is an array containing the corresponding file paths.
+    """
     file_id_hash_arr = np.array(list(file_id_dict.keys()))
     file_path_arr = np.array(list(file_id_dict.values()))
     return file_id_hash_arr, file_path_arr
@@ -487,7 +503,7 @@ def plot_data(fig: Any,
         list_byte_axes.append(ax_filesystem_bytes)
         list_count_axes.append(ax_filesystem_counts)
 
-        # convert to MiB
+        # convert to MiB using 1048576 (ie: 2**20)
         bytes_read = bytes_rd_series[filesystem]/1048576
         bytes_written = bytes_wr_series[filesystem]/1048576
         files_written = file_wr_series[filesystem]
@@ -510,18 +526,18 @@ def plot_data(fig: Any,
         else:
             ax_filesystem_bytes.annotate(filesystem, (-0.3, 0.5), fontsize=fontsize, xycoords='axes fraction')
 
-        ax_filesystem_counts.barh(0, file_wr_series[filesystem], color='red', alpha=0.3)
-        ax_filesystem_counts.barh(1, file_rd_series[filesystem], color='blue', alpha=0.3)
+        ax_filesystem_counts.barh(0, files_written, color='red', alpha=0.3)
+        ax_filesystem_counts.barh(1, files_read, color='blue', alpha=0.3)
 
         ax_filesystem_bytes.text(0, 0.75, f' # bytes read ({bytes_read:.2E} MiB)', transform=ax_filesystem_bytes.transAxes)
         ax_filesystem_bytes.text(0, 0.25, f' # bytes written ({bytes_written:.2E} MiB)', transform=ax_filesystem_bytes.transAxes)
 
-        if file_rd_series[filesystem] == 0:
+        if files_read == 0:
             ax_filesystem_counts.text(0, 0.75, ' 0 files read', transform=ax_filesystem_counts.transAxes)
         else:
             ax_filesystem_counts.text(0, 0.75, f' # files read ({files_read:.2E})', transform=ax_filesystem_counts.transAxes)
 
-        if file_wr_series[filesystem] == 0:
+        if files_written == 0:
             ax_filesystem_counts.text(0, 0.25, ' 0 files written', transform=ax_filesystem_counts.transAxes)
         else:
             ax_filesystem_counts.text(0, 0.25, f' # files written ({files_written:.2E})', transform=ax_filesystem_counts.transAxes)
