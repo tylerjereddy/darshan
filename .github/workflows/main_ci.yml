@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - pydarshan-devel
+      - pydarshan-MiB
   pull_request:
     branches:
       - pydarshan-devel
+      - pydarshan-MiB
 
 jobs:
   test_pydarshan:
@@ -45,7 +47,7 @@ jobs:
           python setup.py install
       - name: Test with pytest
         run: |
-          export LD_LIBRARY_PATH=$PWD/darshan_install/lib
+          export LD_LIBRARY_PATH=/home/jacobdickens/darshan_install/lib
           # the test suite is sensitive to
           # relative dir for test file paths
           cd darshan-util/pydarshan
