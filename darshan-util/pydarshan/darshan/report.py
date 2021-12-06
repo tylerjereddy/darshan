@@ -21,6 +21,9 @@ import pandas as pd
 import collections.abc
 
 import warnings
+# TODO: we shouldn't really be shadowing
+# standard library module names
+from warnings import warn
 
 import logging
 logger = logging.getLogger(__name__)
@@ -599,7 +602,7 @@ class DarshanReport(object):
         """
 
         if dtype is not None:
-            warnings.warn('The use dtype argument is deprecated in v3.3.2 and will be removed in v3.4.x', DeprecationWarning, stacklevel=2)
+            warn('The use dtype argument is deprecated in v3.3.2 and will be removed in v3.4.x', DeprecationWarning, stacklevel=2)
 
         unsupported =  ['DXT_POSIX', 'DXT_MPIIO', 'LUSTRE', 'APMPI', 'APXC']
 
@@ -789,7 +792,7 @@ class DarshanReport(object):
         """
 
         if dtype is not None:
-            warnings.warn('The use dtype argument is deprecated in v3.3.2 and will be removed in v3.4.x', DeprecationWarning, stacklevel=2)
+            warn('The use dtype argument is deprecated in v3.3.2 and will be removed in v3.4.x', DeprecationWarning, stacklevel=2)
 
 
         if mod not in self.data['modules']:
