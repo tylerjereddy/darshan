@@ -3,6 +3,7 @@ Module for log handling utilities.
 """
 
 import platform
+import sys
 python_version = platform.python_version_tuple()
 # shim for convenient Python 3.9 importlib.resources
 # interface
@@ -16,10 +17,13 @@ import os
 import glob
 from typing import Optional, Any
 
-if "PYTEST_CURRENT_TEST" in os.environ:
+if 'pytest' in sys.modules:
     # only import pytest if used in a testing context
     import pytest
     pytest_session = True
+    class Skipper:
+        def __init__(self, err_msg):
+            self.err_msg = err_msg
 else:
     pytest_session = False
 
@@ -83,6 +87,6 @@ def get_log_path(filename: str) -> str:
     else:
         err_msg = f"File {filename} not found locally and darshan-logs repo unavailable."
         if pytest_session:
-            pytest.skip(err_msg)
+            return Skipper(err_msg)
         else:
             raise FileNotFoundError(err_msg)

@@ -9,6 +9,7 @@ from pandas.testing import assert_frame_equal #type: ignore
 
 import darshan
 from darshan.cli import summary
+from darshan.log_utils import get_log_path
 
 
 @pytest.mark.parametrize(
@@ -74,6 +75,7 @@ def test_main_with_args(tmpdir, argv):
         [os.path.abspath("./tests/input/noposix.darshan"), "--output=test.html"],
         [os.path.abspath("./tests/input/sample-dxt-simple.darshan")],
         [os.path.abspath("./tests/input/sample-dxt-simple.darshan"), "--output=test.html"],
+        [get_log_path("imbalanced-io.darshan"), "--output=test.html"],
         [None],
     ]
 )

@@ -1,3 +1,4 @@
+import darshan
 import platform
 python_version = platform.python_version_tuple()
 
@@ -20,6 +21,43 @@ except ImportError:
 
 def pytest_configure():
     pytest.has_log_repo = has_log_repo
+
+class CustomNode:
+    def __init__(self, mimic_item):
+        for attr in dir(mimic_item):
+            if attr not in ["own_markers", "iter_markers"] and "__" not in attr:
+                setattr(self, attr, getattr(mimic_item, attr))
+
+def pytest_collection_modifyitems(config, items):
+    new_items = []
+    skip_indices = []
+    for i, test_item in enumerate(items.copy()):
+        param_marker = test_item.own_markers[0]
+        num_args = int(len(param_marker.args) / 2)
+        for arg_num in range(num_args):
+            arg_name = param_marker.args[arg_num]
+            arg_values = param_marker.args[arg_num + 1]
+            for arg_val_num, arg_value in enumerate(arg_values[:]):
+                skipper_found = 0
+                for arg_sub_value in arg_value:
+                    if isinstance(arg_sub_value, darshan.log_utils.Skipper):
+                        err_msg = arg_sub_value.err_msg
+                        if arg_val_num not in skip_indices:
+                            skip_indices.append(arg_val_num)
+                            customnode = CustomNode(test_item)
+                            customnode.own_markers = pytest.mark.skip
+                            def iter_marks(name):
+                                yield pytest.mark.skip(reason=err_msg)
+                            customnode.iter_markers = iter_marks
+                            new_items.append(customnode)
+
+    for i, item in enumerate(items.copy()):
+        if i not in skip_indices:
+            new_items.append(item)
+
+    items.clear()
+    items.extend(new_items)
+
 
 @pytest.fixture
 def log_repo_files():
