@@ -379,4 +379,9 @@ def get_heatmap_df(agg_df: pd.DataFrame, xbins: int) -> pd.DataFrame:
     cats = cats.mul(agg_df["length"], axis=0)
     cats.index = agg_df["rank"]
     hmap_df = cats.groupby("rank").sum()
+    nonzero_rows, nonzero_columns = hmap_df.to_numpy().nonzero()
+    print("dxt heatmap nonzero_rows:", nonzero_rows)
+    print("dxt heatmap NUM nonzero_rows:", len(nonzero_rows))
+    print("dxt heatmap nonzero_columns:", nonzero_columns)
+    print("dxt heatmap NUM nonzero_columns:", len(nonzero_columns))
     return hmap_df

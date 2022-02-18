@@ -23,6 +23,9 @@ from darshan.experimental.plots import (
     plot_access_histogram,
 )
 
+from darshan.experimental.plots.plot_common_access_table import DarshanReportTable
+import matplotlib.pyplot as plt
+
 darshan.enable_experimental()
 
 
@@ -427,6 +430,30 @@ class ReportData:
                     fig_width=350,
                 )
                 self.figures.append(com_acc_tbl_fig)
+
+        for mod_name, runtime_heatmap in self.report.heatmaps.items():
+            print(f"runtime heatmap module: {mod_name}")
+            for op in ["read", "write"]:
+                print(f"operation: {op}")
+                nonzero_rows, nonzero_columns = runtime_heatmap.to_df(op).to_numpy().nonzero()
+                print("runtime heatmap nonzero_rows:", nonzero_rows)
+                print("runtime heatmap NUM nonzero_rows:", len(nonzero_rows))
+                print("runtime heatmap nonzero_columns:", nonzero_columns)
+                print("runtime heatmap NUM nonzero_columns:", len(nonzero_columns))
+                df = runtime_heatmap.to_df(op)
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.pcolor(df)
+                runtime_hmap_fig = ReportFigure(
+                    section_title=f"Runtime heatmap",
+                    fig_title=f"module {mod_name} operation {op}",
+                    fig_func=lambda x: fig,
+                    fig_args={"x": None},
+                    fig_description="",
+                    fig_width=350,
+                )
+                self.figures.append(runtime_hmap_fig)
+        
 
     def build_sections(self):
         """

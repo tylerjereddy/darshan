@@ -373,3 +373,28 @@ def test_file_closure():
         # context when report.log has been removed
         # (happens with pytest sometimes)
         del(report.log)
+
+
+@pytest.mark.parametrize("logname, hmap_types, nbins, bin_width, shape",
+        # TODO: add these or better heatmap log file to logs repo..
+        [("pq_heeellompi_id109748-109748_1-11-78543-3128119638067799574_1.darshan",
+          ["POSIX", "STDIO"],
+          200,
+          0.1,
+          (4,200),
+          ),
+         ("pq_heeellompi_id104935-104935_1-7-77596-4389948044490659738_1.darshan",
+          ["POSIX", "STDIO"],
+          101,
+          0.1,
+          (4,101),
+          ),
+        ])
+def test_runtime_heatmap_retrieval(logname, hmap_types, nbins, bin_width, shape):
+    with darshan.DarshanReport(get_log_path(logname), read_all=True) as report:
+        assert list(report.heatmaps.keys()) == hmap_types
+        for heatmap in report.heatmaps.values():
+            assert heatmap._nbins == nbins
+            assert heatmap._bin_width_seconds == bin_width
+            assert heatmap.to_df("read").shape == shape
+            assert heatmap.to_df("write").shape == shape
