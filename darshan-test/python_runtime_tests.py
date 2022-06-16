@@ -92,6 +92,18 @@ def test_runtime_heatmap_div_by_zero(tmpdir):
         # by darshan
         assert len(log_file_list) == 1
         path_to_log = os.path.join(cwd, log_file_list[0])
+        parser_path = os.path.join(darshan_install_path,
+                                   "bin",
+                                   "darshan-parser")
+        print("************* parser output:\n", subprocess.check_output([f"{parser_path}",
+                                 f"{path_to_log}"]))
+
         report = darshan.DarshanReport(path_to_log)
+        hmap_df_write = report.heatmaps["POSIX"].to_df(ops=["write"])
+        print("*** hmap_df_write:\n", hmap_df_write)
+        hmap_df_read = report.heatmaps["POSIX"].to_df(ops=["read"])
+        print("*** hmap_df_read:\n", hmap_df_read)
         hmap_df = report.heatmaps["POSIX"].to_df(ops=["read", "write"])
+        print("*** hmap_df:\n", hmap_df)
         assert (hmap_df < -1).to_numpy().sum() == 0
+        assert 0
