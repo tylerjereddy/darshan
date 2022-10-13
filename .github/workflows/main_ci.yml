@@ -22,6 +22,9 @@ jobs:
         platform: [ubuntu-latest,
                    macos-latest]
         python-version: ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11.0-rc.2"]
+        include:
+          - platform: ubuntu-22.04
+            python-version: "3.10"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v3
@@ -39,6 +42,7 @@ jobs:
           brew install automake
       - name: Install darshan-util
         run: |
+          ar --version
           mkdir darshan_install
           export DARSHAN_INSTALL_PATH=$PWD/darshan_install
           git submodule update --init
