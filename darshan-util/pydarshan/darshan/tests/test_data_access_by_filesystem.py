@@ -480,8 +480,9 @@ def test_log_scale_display(filename):
                          [('imbalanced-io.darshan', [12, 16], None),
                           ('imbalanced-io.darshan', [12, 16], 3),
                           ('imbalanced-io.darshan', [12, 16], 1),
-                          ('snyder_acme.exe_id1253318_9-27-24239-1515303144625770178_2.darshan',
-                           [12, 16], None)])
+                          pytest.param('snyder_acme.exe_id1253318_9-27-24239-1515303144625770178_2.darshan',
+                           [12, 16], None, marks=pytest.mark.xfail(reason="high memory requirement",
+                                                                  run=False))])
 def test_vertical_resize(filename, expected_dims, num_cats):
     # ensure that plots are expanded vertically to
     # match the number of filesystems plotted
