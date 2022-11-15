@@ -74,6 +74,8 @@ jobs:
           python -m pip uninstall -y lxml
       - name: Setup upterm session
         uses: lhotari/action-upterm@v1
+        with:
+          limit-access-to-actor: true
       - name: Test with pytest
         run: |
           export LD_LIBRARY_PATH=$PWD/darshan_install/lib
