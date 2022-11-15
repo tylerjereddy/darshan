@@ -72,10 +72,8 @@ jobs:
           # uninstall deps that are not absolute requirements
           # to make sure that i.e., tests skip appropriately
           python -m pip uninstall -y lxml
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
-        with:
-          limit-access-to-actor: true
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
       - name: Test with pytest
         run: |
           export LD_LIBRARY_PATH=$PWD/darshan_install/lib
